@@ -1,0 +1,30 @@
+[project]
+name = "neo-portal"
+version = "0.1.0"
+description = "A neovim remote ssh launcher, powered by kitty"
+readme = "README.md"
+authors = [
+    { name = "Victor Lopez", email = "vhrlopes@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = ["click>=8.1"]
+
+[project.scripts]
+neo-portal = "neo_portal.cli:cli"
+
+[dependency-groups]
+dev = ["pytest>=8.0", "ruff>=0.11"]
+
+[build-system]
+requires = ["uv_build>=0.9.27,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]

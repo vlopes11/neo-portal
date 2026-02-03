@@ -36,6 +36,9 @@ uv sync
 
 ```sh
 neo-portal --host 192.168.1.37 --remote-host some.host.org
+
+# Search a different remote directory
+neo-portal --host 192.168.1.37 --remote-host some.host.org --remote-dir ~/projects
 ```
 
 ### Options
@@ -45,6 +48,7 @@ neo-portal --host 192.168.1.37 --remote-host some.host.org
 | `--host`         | yes      |         | TCP host for kitty remote control    |
 | `--remote-host`  | yes      |         | SSH remote host to browse dirs on    |
 | `--port`         | no       | 28812   | TCP port for kitty remote control    |
+| `--remote-dir`   | no       | ~/dev   | Remote directory to search for projects |
 
 ## Development
 

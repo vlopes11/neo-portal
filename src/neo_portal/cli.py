@@ -12,7 +12,7 @@ from neo_portal.core import (
 )
 
 
-@click.group(invoke_without_command=True)
+@click.command()
 @click.version_option(version=__version__, prog_name="neo-portal")
 @click.option(
     "--host",
@@ -31,9 +31,18 @@ from neo_portal.core import (
     type=int,
     help="TCP port for kitty remote control.",
 )
-def cli(host: str, remote_host: str, port: int) -> None:
+@click.option(
+    "--remote-dir",
+    default="~/dev",
+    show_default=True,
+    help="Remote directory to search for projects.",
+)
+def cli(host: str, remote_host: str, port: int, remote_dir: str) -> None:
     """neo-portal: a CLI application."""
     if not is_port_listening(host, port):
         init(host, port)
-    directory = pick_directory(host, remote_host, port)
-    launch_tab(directory, host, remote_host, port)
+    try:
+        directory = pick_directory(host, remote_host, port, remote_dir=remote_dir)
+        launch_tab(directory, host, remote_host, port)
+    except RuntimeError as exc:
+        raise click.ClickException(str(exc)) from exc

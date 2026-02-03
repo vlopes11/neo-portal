@@ -2,6 +2,7 @@
 
 import json
 import os
+import shlex
 import socket
 import subprocess
 import tempfile
@@ -32,7 +33,7 @@ def init(
 ) -> None:
     """Start kitty with remote control via TCP and wait until the port is listening."""
     addr = tcp_address(host, port)
-    subprocess.Popen(
+    proc = subprocess.Popen(
         [
             "kitty",
             "-o",
@@ -44,6 +45,9 @@ def init(
     )
     deadline = time.monotonic() + timeout
     while not is_port_listening(host, port):
+        ret = proc.poll()
+        if ret is not None:
+            raise RuntimeError(f"kitty exited early with return code {ret}")
         if time.monotonic() >= deadline:
             raise RuntimeError(f"Timed out waiting for kitty to listen on {addr}")
         time.sleep(poll_interval)
@@ -70,6 +74,7 @@ def pick_directory(
     host: str,
     remote_host: str,
     port: int = DEFAULT_TCP_PORT,
+    remote_dir: str = "~/dev",
     timeout: float = 120.0,
     poll_interval: float = 0.2,
 ) -> str:
@@ -77,8 +82,6 @@ def pick_directory(
     addr = tcp_address(host, port)
     with tempfile.NamedTemporaryFile(delete=False, suffix=".neo-portal") as f:
         tmp_path = f.name
-    # Truncate so the poll loop starts with an empty file.
-    open(tmp_path, "w").close()
 
     try:
         tab_id = _find_min_tab_id(addr)
@@ -95,10 +98,10 @@ def pick_directory(
             check=True,
         )
         fzf_cmd = (
-            f"ssh {remote_host} "
-            '"find ~/dev -maxdepth 2'
+            f"ssh {shlex.quote(remote_host)} "
+            f'"find {remote_dir} -maxdepth 2'
             " -not -path '*/.*' -type d\""
-            f" | fzf > {tmp_path}\r"
+            f" | fzf > {shlex.quote(tmp_path)}\r"
         )
         subprocess.run(
             [
@@ -144,7 +147,7 @@ def launch_tab(
             "ssh",
             "-t",
             remote_host,
-            f"cd {directory} && nvim",
+            f"cd {shlex.quote(directory)} && nvim",
         ],
         check=True,
     )

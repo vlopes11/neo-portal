@@ -2,6 +2,7 @@
 
 import json
 import os
+import shlex
 import tempfile
 from unittest.mock import MagicMock, patch
 
@@ -9,7 +10,13 @@ import pytest
 from click.testing import CliRunner
 
 from neo_portal.cli import cli
-from neo_portal.core import DEFAULT_TCP_PORT, tcp_address
+from neo_portal.core import (
+    DEFAULT_TCP_PORT,
+    _find_min_tab_id,
+    launch_tab,
+    pick_directory,
+    tcp_address,
+)
 
 TEST_HOST = "1.2.3.4"
 TEST_REMOTE = "test.remote.host"
@@ -111,7 +118,9 @@ def test_args_passed_through() -> None:
         result = runner.invoke(cli, CLI_ARGS)
         assert result.exit_code == 0
         mock_init.assert_called_once_with(TEST_HOST, DEFAULT_TCP_PORT)
-        mock_pick.assert_called_once_with(TEST_HOST, TEST_REMOTE, DEFAULT_TCP_PORT)
+        mock_pick.assert_called_once_with(
+            TEST_HOST, TEST_REMOTE, DEFAULT_TCP_PORT, remote_dir="~/dev"
+        )
         mock_launch.assert_called_once_with(
             "/some/dir", TEST_HOST, TEST_REMOTE, DEFAULT_TCP_PORT
         )
@@ -130,8 +139,41 @@ def test_custom_port_passed_through() -> None:
         result = runner.invoke(cli, [*CLI_ARGS, "--port", "9999"])
         assert result.exit_code == 0
         mock_init.assert_called_once_with(TEST_HOST, 9999)
-        mock_pick.assert_called_once_with(TEST_HOST, TEST_REMOTE, 9999)
+        mock_pick.assert_called_once_with(
+            TEST_HOST, TEST_REMOTE, 9999, remote_dir="~/dev"
+        )
         mock_launch.assert_called_once_with("/some/dir", TEST_HOST, TEST_REMOTE, 9999)
+
+
+def test_custom_remote_dir_passed_through() -> None:
+    """--remote-dir is forwarded to pick_directory."""
+    mocks = _mock_cli_callbacks()
+    with (
+        patch("neo_portal.cli.is_port_listening", return_value=True),
+        mocks["pick_directory"] as mock_pick,
+        mocks["launch_tab"],
+    ):
+        runner = CliRunner()
+        result = runner.invoke(cli, [*CLI_ARGS, "--remote-dir", "~/projects"])
+        assert result.exit_code == 0
+        mock_pick.assert_called_once_with(
+            TEST_HOST, TEST_REMOTE, DEFAULT_TCP_PORT, remote_dir="~/projects"
+        )
+
+
+def test_runtime_error_becomes_click_exception() -> None:
+    """RuntimeError from core functions is wrapped as ClickException."""
+    with (
+        patch("neo_portal.cli.is_port_listening", return_value=True),
+        patch(
+            "neo_portal.cli.pick_directory",
+            side_effect=RuntimeError("something broke"),
+        ),
+    ):
+        runner = CliRunner()
+        result = runner.invoke(cli, CLI_ARGS)
+        assert result.exit_code == 1
+        assert "something broke" in result.output
 
 
 def test_find_min_tab_id() -> None:
@@ -155,8 +197,6 @@ def test_find_min_tab_id() -> None:
     ls_result.stdout = kitty_ls_output
     with patch("neo_portal.core.subprocess.run") as mock_run:
         mock_run.return_value = ls_result
-        from neo_portal.core import _find_min_tab_id
-
         assert _find_min_tab_id(TCP_ADDR) == 5
     mock_run.assert_called_once_with(
         ["kitty", "@", "--to", TCP_ADDR, "ls"],
@@ -202,8 +242,6 @@ def test_pick_directory() -> None:
             )()
             mock_ntf.return_value.__exit__ = lambda *a: None
 
-            from neo_portal.core import pick_directory
-
             directory = pick_directory(TEST_HOST, TEST_REMOTE)
 
         assert directory == "~/dev/my-project"
@@ -232,8 +270,8 @@ def test_pick_directory() -> None:
             "send-text",
         ]
         assert "fzf" in cmd_list[5]
-        assert TEST_REMOTE in cmd_list[5]
-        assert tmp_path in cmd_list[5]
+        assert shlex.quote(TEST_REMOTE) in cmd_list[5]
+        assert shlex.quote(tmp_path) in cmd_list[5]
     finally:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
@@ -257,8 +295,6 @@ def test_pick_directory_timeout() -> None:
             )()
             mock_ntf.return_value.__exit__ = lambda *a: None
 
-            from neo_portal.core import pick_directory
-
             with pytest.raises(RuntimeError, match="Timed out"):
                 pick_directory(
                     TEST_HOST,
@@ -274,8 +310,6 @@ def test_pick_directory_timeout() -> None:
 def test_launch_tab_runs_correct_command() -> None:
     """launch_tab() opens a new kitty tab with ssh + cd + nvim."""
     with patch("neo_portal.core.subprocess.run") as mock_run:
-        from neo_portal.core import launch_tab
-
         launch_tab(
             "~/dev/conduit/validator-network",
             TEST_HOST,
@@ -292,7 +326,7 @@ def test_launch_tab_runs_correct_command() -> None:
             "ssh",
             "-t",
             TEST_REMOTE,
-            "cd ~/dev/conduit/validator-network && nvim",
+            f"cd {shlex.quote('~/dev/conduit/validator-network')} && nvim",
         ],
         check=True,
     )
@@ -311,7 +345,9 @@ def test_pick_directory_then_launch_tab() -> None:
         runner = CliRunner()
         result = runner.invoke(cli, CLI_ARGS)
         assert result.exit_code == 0
-        mock_pick.assert_called_once_with(TEST_HOST, TEST_REMOTE, DEFAULT_TCP_PORT)
+        mock_pick.assert_called_once_with(
+            TEST_HOST, TEST_REMOTE, DEFAULT_TCP_PORT, remote_dir="~/dev"
+        )
         mock_launch.assert_called_once_with(
             "~/dev/conduit/validator-network",
             TEST_HOST,

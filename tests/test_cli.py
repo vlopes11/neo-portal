@@ -326,7 +326,10 @@ def test_launch_tab_runs_correct_command() -> None:
             "ssh",
             "-t",
             TEST_REMOTE,
-            f"cd {shlex.quote('~/dev/conduit/validator-network')} && nvim",
+            "zsh -ic "
+            + shlex.quote(
+                f"cd {shlex.quote('~/dev/conduit/validator-network')} && nvim"
+            ),
         ],
         check=True,
     )

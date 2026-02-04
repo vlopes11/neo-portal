@@ -147,7 +147,7 @@ def launch_tab(
             "ssh",
             "-t",
             remote_host,
-            f"cd {shlex.quote(directory)} && nvim",
+            f"zsh -ic {shlex.quote(f'cd {shlex.quote(directory)} && nvim')}",
         ],
         check=True,
     )
